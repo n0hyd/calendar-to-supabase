@@ -1,27 +1,49 @@
-async function testGoogleAuth() {
-  const params = new URLSearchParams({
+async function fetchCalendarEvents() {
+  // 1. Get access token
+  const tokenParams = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
     refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
     grant_type: "refresh_token",
   });
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params,
+    body: tokenParams,
   });
 
-  const data = await res.json();
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
 
-  if (!data.access_token) {
-    throw new Error("Failed to get access token");
+  if (!accessToken) {
+    throw new Error("Failed to obtain access token");
   }
 
-  console.log("✅ Google access token retrieved");
+  // 2. Fetch upcoming events (next 7 days)
+  const now = new Date().toISOString();
+  const sevenDaysOut = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const eventsRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+      `timeMin=${now}&timeMax=${sevenDaysOut}&singleEvents=true&orderBy=startTime`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  const eventsData = await eventsRes.json();
+
+  if (!eventsData.items) {
+    throw new Error("No events returned from Google Calendar");
+  }
+
+  console.log(`📅 Found ${eventsData.items.length} events in next 7 days`);
 }
 
-testGoogleAuth().catch(err => {
+fetchCalendarEvents().catch(err => {
   console.error("❌ Error:", err.message);
   process.exit(1);
 });
