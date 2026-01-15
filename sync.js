@@ -1,6 +1,3 @@
-const fetch = require("node-fetch");
-
-
 async function testGoogleAuth() {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
