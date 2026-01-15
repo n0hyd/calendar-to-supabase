@@ -1,5 +1,5 @@
-async function insertOneEvent() {
-  // ---- Google token ----
+async function clearThisWeek() {
+  // ---- Google token (unchanged) ----
   const tokenParams = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -16,66 +16,46 @@ async function insertOneEvent() {
   const { access_token } = await tokenRes.json();
   if (!access_token) throw new Error("No access token");
 
-  // ---- Fetch one calendar's events ----
-  const calendarId = "bjones@usd260.com";
-  const now = new Date().toISOString();
+  // ---- Calculate Sunday → Saturday ----
+  const now = new Date();
+  const day = now.getDay(); // Sunday = 0
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - day);
+  sunday.setHours(0, 0, 0, 0);
 
-  const eventsRes = await fetch(
-    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-      calendarId
-    )}/events?timeMin=${now}&singleEvents=true&orderBy=startTime`,
+  const saturday = new Date(sunday);
+  saturday.setDate(sunday.getDate() + 6);
+  saturday.setHours(23, 59, 59, 999);
+
+  // ---- Call Supabase clear function ----
+  const calendarId = "bjones@usd260.com";
+
+  const res = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/rpc/clear_calendar_events_for_week`,
     {
-      headers: { Authorization: `Bearer ${access_token}` },
+      method: "POST",
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_calendar_id: calendarId,
+        p_week_start: sunday.toISOString().slice(0, 10),
+        p_week_end: saturday.toISOString().slice(0, 10),
+      }),
     }
   );
 
-  const eventsData = await eventsRes.json();
-  if (!eventsData.items || eventsData.items.length === 0) {
-    throw new Error("No events found");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Supabase clear error: ${text}`);
   }
 
-  const event = eventsData.items[0];
-
-  // ---- Prepare Supabase row ----
-  const row = {
-    title: event.summary || "No title",
-    start_time: event.start.dateTime || event.start.date,
-    end_time: event.end?.dateTime || event.end?.date,
-    all_day: !!event.start.date,
-    calendar_name: "bjones@usd260.com",
-    calendar_id: calendarId,
-  };
-
-const sbRes = await fetch(
-  `${process.env.SUPABASE_URL}/rest/v1/rpc/insert_calendar_event`,
-  {
-    method: "POST",
-    headers: {
-      apikey: process.env.SUPABASE_SERVICE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      p_title: row.title,
-      p_start_time: row.start_time,
-      p_end_time: row.end_time,
-      p_all_day: row.all_day,
-      p_calendar_name: row.calendar_name,
-      p_calendar_id: row.calendar_id,
-    }),
-  }
-);
-
-if (!sbRes.ok) {
-  const text = await sbRes.text();
-  throw new Error(`Supabase error: ${text}`);
+  console.log("🧹 Cleared this week's events");
 }
 
-
-  console.log("✅ Inserted 1 event into Supabase");
-}
-
-insertOneEvent().catch(err => {
+clearThisWeek().catch(err => {
   console.error("❌ Error:", err.message);
   process.exit(1);
 });
