@@ -46,25 +46,31 @@ async function insertOneEvent() {
     calendar_id: calendarId,
   };
 
-  // ---- Insert into Supabase ----
-  const sbRes = await fetch(
-    `${process.env.SUPABASE_URL}/rest/v1/calendar_events`,
-    {
-      method: "POST",
-      headers: {
-        apikey: process.env.SUPABASE_SERVICE_KEY,
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=minimal",
-      },
-      body: JSON.stringify(row),
-    }
-  );
-
-  if (!sbRes.ok) {
-    const text = await sbRes.text();
-    throw new Error(`Supabase error: ${text}`);
+const sbRes = await fetch(
+  `${process.env.SUPABASE_URL}/rest/v1/rpc/insert_calendar_event`,
+  {
+    method: "POST",
+    headers: {
+      apikey: process.env.SUPABASE_SERVICE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      p_title: row.title,
+      p_start_time: row.start_time,
+      p_end_time: row.end_time,
+      p_all_day: row.all_day,
+      p_calendar_name: row.calendar_name,
+      p_calendar_id: row.calendar_id,
+    }),
   }
+);
+
+if (!sbRes.ok) {
+  const text = await sbRes.text();
+  throw new Error(`Supabase error: ${text}`);
+}
+
 
   console.log("✅ Inserted 1 event into Supabase");
 }
