@@ -1,5 +1,5 @@
-async function listCalendars() {
-  // Get access token
+async function fetchWorkCalendarEvents() {
+  // 1. Get access token
   const tokenParams = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -20,9 +20,18 @@ async function listCalendars() {
     throw new Error("Failed to obtain access token");
   }
 
-  // List all calendars
-  const calRes = await fetch(
-    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+  // 2. Fetch events from the SCHOOL calendar only
+  const calendarId = "bjones@usd260.com";
+
+  const now = new Date().toISOString();
+  const sevenDaysOut = new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  const eventsRes = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      calendarId
+    )}/events?timeMin=${now}&timeMax=${sevenDaysOut}&singleEvents=true&orderBy=startTime`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -30,19 +39,18 @@ async function listCalendars() {
     }
   );
 
-  const calData = await calRes.json();
+  const eventsData = await eventsRes.json();
 
-  if (!calData.items) {
-    throw new Error("No calendars returned");
+  if (!eventsData.items) {
+    throw new Error("No events returned");
   }
 
-  console.log("📅 Calendars visible to this account:");
-  calData.items.forEach(cal => {
-    console.log(`- ${cal.summary} (id: ${cal.id})`);
-  });
+  console.log(
+    `📅 Found ${eventsData.items.length} events on ${calendarId}`
+  );
 }
 
-listCalendars().catch(err => {
+fetchWorkCalendarEvents().catch(err => {
   console.error("❌ Error:", err.message);
   process.exit(1);
 });
