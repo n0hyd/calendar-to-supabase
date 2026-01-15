@@ -1,5 +1,5 @@
-async function fetchWorkCalendarEvents() {
-  // 1. Get access token
+async function insertOneEvent() {
+  // ---- Google token ----
   const tokenParams = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID,
     client_secret: process.env.GOOGLE_CLIENT_SECRET,
@@ -13,44 +13,63 @@ async function fetchWorkCalendarEvents() {
     body: tokenParams,
   });
 
-  const tokenData = await tokenRes.json();
-  const accessToken = tokenData.access_token;
+  const { access_token } = await tokenRes.json();
+  if (!access_token) throw new Error("No access token");
 
-  if (!accessToken) {
-    throw new Error("Failed to obtain access token");
-  }
-
-  // 2. Fetch events from the SCHOOL calendar only
+  // ---- Fetch one calendar's events ----
   const calendarId = "bjones@usd260.com";
-
   const now = new Date().toISOString();
-  const sevenDaysOut = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000
-  ).toISOString();
 
   const eventsRes = await fetch(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
       calendarId
-    )}/events?timeMin=${now}&timeMax=${sevenDaysOut}&singleEvents=true&orderBy=startTime`,
+    )}/events?timeMin=${now}&singleEvents=true&orderBy=startTime`,
     {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${access_token}` },
     }
   );
 
   const eventsData = await eventsRes.json();
-
-  if (!eventsData.items) {
-    throw new Error("No events returned");
+  if (!eventsData.items || eventsData.items.length === 0) {
+    throw new Error("No events found");
   }
 
-  console.log(
-    `📅 Found ${eventsData.items.length} events on ${calendarId}`
+  const event = eventsData.items[0];
+
+  // ---- Prepare Supabase row ----
+  const row = {
+    title: event.summary || "No title",
+    start_time: event.start.dateTime || event.start.date,
+    end_time: event.end?.dateTime || event.end?.date,
+    all_day: !!event.start.date,
+    calendar_name: "bjones@usd260.com",
+    calendar_id: calendarId,
+  };
+
+  // ---- Insert into Supabase ----
+  const sbRes = await fetch(
+    `${process.env.SUPABASE_URL}/rest/v1/calendar_events`,
+    {
+      method: "POST",
+      headers: {
+        apikey: process.env.SUPABASE_SERVICE_KEY,
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify(row),
+    }
   );
+
+  if (!sbRes.ok) {
+    const text = await sbRes.text();
+    throw new Error(`Supabase error: ${text}`);
+  }
+
+  console.log("✅ Inserted 1 event into Supabase");
 }
 
-fetchWorkCalendarEvents().catch(err => {
+insertOneEvent().catch(err => {
   console.error("❌ Error:", err.message);
   process.exit(1);
 });
